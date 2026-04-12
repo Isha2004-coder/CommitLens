@@ -30,7 +30,7 @@ const openai_bt = new OpenAI({
   
     try {
       const completion_bt = await openai_bt.chat.completions.create({
-        model: "openai/gpt-4o-mini", // <-- Note the "openai/" prefix for OpenRouter
+        model: "openai/gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt_bt },
           { role: "user", content: emailText_bt }
