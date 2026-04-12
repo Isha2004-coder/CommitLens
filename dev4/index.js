@@ -1,70 +1,99 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
-import nodemailer from "nodemailer";
+import express from "express";
 
 dotenv.config();
+
+const app = express();
+app.use(express.json());
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
 });
 
-let transporter;
+app.post("/generate-reply", async (req, res) => {
+  const { task, deadline } = req.body;
 
-async function createTransporter() {
-  const testAccount = await nodemailer.createTestAccount();
-
-  transporter = nodemailer.createTransport({
-    host: "smtp.ethereal.email",
-    port: 587,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
-  });
-}
-
-async function sendEmail(reply) {
-  const info = await transporter.sendMail({
-    from: '"CommitLens" <test@ethereal.email>',
-    to: "test@example.com",
-    subject: "⚠️ Missed Commitment",
-    text: reply,
-  });
-
-  console.log("\nEmail sent!");
-  console.log("Preview URL:", nodemailer.getTestMessageUrl(info));
-}
-
-async function generateReply() {
-  const prompt = `
+  try {
+    const prompt = `
 A user missed a commitment.
 
-Task: send the report
-Deadline: yesterday
+Task: ${task}
+Deadline: ${new Date(deadline).toLocaleString()}
 
 Write a short professional apology email (2-3 lines).
+
+Do NOT use placeholders like [Recipient's Name], [Your Name], or "Sender".
+Use a realistic recipient name (like John) and sign with "Ramneek".
+Include a proper subject line.
 `;
 
-  const response = await openai.chat.completions.create({
-    model: "openai/gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-  });
+    const response = await openai.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+    });
 
-  const reply = response.choices[0].message.content;
+    const full = response.choices[0].message.content;
 
-  console.log("\nAI Reply:\n");
-  console.log(reply);
+    const lines = full.split("\n").filter(line => line.trim() !== "");
 
-  console.log("\n--- COPY THIS FOR GMAIL DRAFT ---\n");
-  console.log(reply);
+    const subject = lines[0].replace("Subject:", "").trim();
+    const greeting = lines[1];
+    const message = lines[2];
+    const closing = lines[3];
+    const signature = lines[4];
 
-  await sendEmail(reply);
-}
+    const reply = `${greeting}\n\n${message}\n\n${closing}\n${signature}`;
 
-async function main() {
-  await createTransporter();
-  await generateReply();
-}
+res.json({ reply });
 
-main();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
+
+app.post("/generate-reply-text", async (req, res) => {
+  const { task, deadline } = req.body;
+
+  try {
+    const prompt = `
+A user missed a commitment.
+
+Task: ${task}
+Deadline: ${new Date(deadline).toLocaleString()}
+
+Write a short professional apology email (2-3 lines).
+
+Do NOT use placeholders. Use name John and sign as Ramneek.
+Include subject line.
+`;
+
+    const response = await openai.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const full = response.choices[0].message.content;
+    const lines = full.split("\n").filter(l => l.trim());
+
+    const greeting = lines[1];
+    const message = lines[2];
+    const closing = lines[3];
+    const signature = lines[4];
+
+    const formatted = `${greeting}\n\n${message}\n\n${closing}\n${signature}`;
+
+    res.send(formatted);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Something went wrong");
+  }
+});
+
+app.listen(3000, () => {
+  console.log("Server running on http://localhost:3000");
+});
