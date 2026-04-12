@@ -5,14 +5,21 @@ const { createCommitment, getCommitmentById } = require("../data/storage");
 
 // POST /extract
 router.post("/", async (req, res) => {
-  const { subject, body } = req.body;
+  const raw = req.body || {};
+  const { subject, body, emailText: emailTextField } = raw;
 
-  if (!subject && !body) {
+  const sub = typeof subject === "string" ? subject.trim() : "";
+  const bod = typeof body === "string" ? body.trim() : "";
+  const single =
+    typeof emailTextField === "string" ? emailTextField.trim() : "";
+
+  const emailText = (single || `${sub}\n${bod}`).trim();
+
+  if (!emailText) {
     return res.status(400).json({ error: "Provide at least subject or body" });
   }
 
   const emailId = `email_${Date.now()}`;
-  const emailText = `${subject || ""}\n${body || ""}`.trim();
   console.log(`[Extract] Processing email: "${emailText.slice(0, 60)}..."`);
 
   const extracted = await extractCommitment(emailText, emailId);
