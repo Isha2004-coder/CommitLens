@@ -16,6 +16,38 @@ function parseIsMine(value) {
   return false;
 }
 
+/** Arizona (no DST) — use for how we *describe* deadlines to humans */
+const ARIZONA_TZ = "America/Phoenix";
+
+function formatInstantArizona(ms) {
+  if (ms === null || ms === undefined || Number.isNaN(Number(ms))) {
+    return "unspecified";
+  }
+  const d = new Date(Number(ms));
+  if (Number.isNaN(d.getTime())) return "unspecified";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: ARIZONA_TZ,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(d);
+}
+
+/** Remove raw ISO timestamps if the model still emits them */
+function stripRawIsoFromText(s) {
+  if (!s || typeof s !== "string") return s;
+  return s
+    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z/gi, "")
+    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?[+-]\d{2}:\d{2}/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .trim();
+}
+
 router.post("/", async (req, res) => {
   const { task, deadline, isMine: isMineRaw } = req.body;
   const isMine = parseIsMine(isMineRaw);
@@ -37,37 +69,37 @@ router.post("/", async (req, res) => {
   const missedDeadline =
     deadlineMs !== null && nowMs > deadlineMs;
 
-  const deadlineIso =
-    deadlineMs !== null ? new Date(deadlineMs).toISOString() : "unspecified";
-  const nowIso = new Date().toISOString();
+  const nowHumanAz = formatInstantArizona(nowMs);
+  const deadlineHumanAz =
+    deadlineMs !== null ? formatInstantArizona(deadlineMs) : "unspecified";
 
   const scenarioKey = `${isMine ? "mine" : "theirs"}_${missedDeadline ? "late" : "on_time_or_future"}`;
 
   const instructionsByScenario = {
     mine_late: `
-The writer promised to do the task below and the deadline (see ISO time below) is ALREADY PAST relative to "right now".
+The writer promised to do the task below. missedDeadline is YES (deadline already passed vs server clock).
 Write a short apology / recommit email (2–4 sentences): acknowledge being late, restate the task, propose when you'll deliver.
-When you mention time, use the EXACT deadline clock time from the ISO string (do not round 4:30 to 4:00).
+If you mention when it was due, use the SAME clock time as in "Commitment due (Arizona)" below — do not round (e.g. keep 4:30, not 4:00).
 Do NOT use placeholders like [Name]. No fake names.
 `,
     mine_on_time_or_future: `
-The writer promised to do the task below but the deadline is STILL IN THE FUTURE (or is now) relative to "right now" — they have NOT missed it.
-Write a short professional email (2–4 sentences): e.g. quick update that you're on track, or confirm timing — NOT an apology for missing the deadline.
-Do NOT say "sorry for missing the deadline" or imply the deadline passed.
-If you mention the due time, copy it from the deadline ISO exactly (preserve :30, etc.).
+The writer promised to do the task below. missedDeadline is NO — deadline is still in the future or not yet passed.
+Write a short professional email (2–4 sentences): on-track update or timing confirmation — NOT an apology for missing the deadline.
+Do NOT say you missed the deadline or that the due date passed.
+If you mention the due time, match "Commitment due (Arizona)" below exactly (including minutes).
 Do NOT use placeholders like [Name]. No fake names.
 `,
     theirs_late: `
-The recipient of your email made the commitment below; the deadline ISO is already past relative to "right now".
-Write a short polite follow-up (2–4 sentences) checking in on their overdue commitment. Not aggressive.
-If you reference the due time, use the exact time from the deadline ISO (do not round).
+The recipient made the commitment below. missedDeadline is YES.
+Write a short polite follow-up (2–4 sentences) on their overdue item. Not aggressive.
+If you reference the due time, match "Commitment due (Arizona)" below exactly (do not round).
 Do NOT use placeholders like [Name]. No fake names.
 `,
     theirs_on_time_or_future: `
-The recipient made the commitment below; the deadline is STILL IN THE FUTURE relative to "right now" — they are NOT late yet.
-Write a short polite check-in or reminder (2–4 sentences). Do NOT accuse them of missing the deadline or say they're late.
+The recipient made the commitment below. missedDeadline is NO — they are not late yet.
+Write a short polite check-in or reminder (2–4 sentences). Do NOT accuse them of missing the deadline.
 Do NOT apologize on your own behalf for their task.
-If you mention the due time, use the exact time from the deadline ISO (preserve minutes).
+If you mention the due time, match "Commitment due (Arizona)" below exactly (including minutes).
 Do NOT use placeholders like [Name]. No fake names.
 `,
   };
@@ -76,10 +108,15 @@ Do NOT use placeholders like [Name]. No fake names.
     instructionsByScenario[scenarioKey] || instructionsByScenario.theirs_on_time_or_future;
 
   const prompt = `
-FACTS (obey these; do not contradict):
-- Right now (UTC): ${nowIso}
-- Commitment deadline (UTC, exact instant): ${deadlineIso}
-- missedDeadline (computed): ${missedDeadline ? "YES — deadline is in the past" : "NO — deadline is now or in the future"}
+FACTS (server uses these for late vs on-time; do not argue with them):
+- missedDeadline: ${missedDeadline ? "YES" : "NO"}
+- Right now (Arizona / ${ARIZONA_TZ}): ${nowHumanAz}
+- Commitment due (Arizona / ${ARIZONA_TZ}): ${deadlineHumanAz}
+
+FORMATTING RULES FOR subject AND body (mandatory):
+- Use normal conversational English for dates and times only — e.g. "Monday, April 13 by 8:42 AM MST" or "tomorrow afternoon".
+- NEVER paste ISO-8601 strings (nothing like 2026-04-13T08:42:06.000Z or ending in Z).
+- Prefer saying "Arizona time" or "MST" when helpful; the times above are already in Arizona.
 
 ${branchInstructions}
 
@@ -102,12 +139,12 @@ body = email body only, plain text, use \\n for line breaks between paragraphs i
 
     const raw = response.choices[0].message.content;
     const parsed = JSON.parse(raw);
-    const subject = (parsed.subject || "").trim();
-    const body = (parsed.body || "").trim();
+    const subject = stripRawIsoFromText((parsed.subject || "").trim());
+    const body = stripRawIsoFromText((parsed.body || "").trim());
 
     const reply = subject
       ? `Subject: ${subject}\n\n${body}`
-      : body || raw;
+      : body || stripRawIsoFromText(String(raw));
 
     res.json({ reply });
   } catch (error) {

@@ -82,7 +82,8 @@ ${refHuman}
     - ALWAYS extract task from them
     - Keep task short and actionable
     - If the email states a specific clock time (e.g. "4:30 PM", "16:30", "by 5:15"), set deadline_iso to that exact local time on the correct calendar day — do NOT round to whole hours (never turn 4:30 into 4:00).
-    - If only a date is given, end of that local day is acceptable; if a time is given, include it in deadline_iso.
+    - If only a date is given with no time, use end of that calendar day in America/Phoenix (Arizona; MST all year, no DST) and express deadline_iso as the correct UTC instant.
+    - If the email implies a local date/time but no timezone is given, assume America/Phoenix for interpreting "tomorrow", "Friday", and any unstated zone.
     - Return ONLY valid JSON
   `;
 
