@@ -1,4 +1,6 @@
-import 'dotenv/config';
+// Do not import dotenv here: this file lives at repo root and resolves packages
+// from ../node_modules. Backend/server.js loads dotenv before any extract runs.
+// For `node test_extractor.js`, test_extractor.js loads dotenv first.
 import OpenAI from "openai";
 
 const openai_bt = new OpenAI({

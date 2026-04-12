@@ -1,4 +1,5 @@
-import { extractCommitment_bt } from './extractor.js';
+import "dotenv/config";
+import { extractCommitment_bt } from "./extractor.js";
 
 function assertShape_bt(result_bt, expectedEmailId_bt) {
   if (!result_bt || typeof result_bt !== 'object') {
