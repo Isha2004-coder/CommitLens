@@ -2,15 +2,18 @@ const express = require("express");
 const router = express.Router();
 const OpenAI = require("openai");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-});
+function getOpenAI() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+  });
+}
 
 router.post("/", async (req, res) => {
   const { task, deadline } = req.body;
 
   try {
+    const openai = getOpenAI();
     const prompt = `
 A user missed a commitment.
 
