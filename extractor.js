@@ -7,7 +7,8 @@ const openai_bt = new OpenAI({
 });
 
 export async function extractCommitment_bt(emailText_bt, emailId_bt) {
-  const currentTime_bt = Date.now(); 
+  const now = new Date();
+  const humanReadableDate = now.toString(); 
   
   const systemPrompt_bt = `
     You are an AI that extracts commitments from email text.
@@ -25,13 +26,16 @@ export async function extractCommitment_bt(emailText_bt, emailId_bt) {
     Even if the sentence is simple, it MUST be treated as a commitment.
 
     ---
+    
+    The current date and time is: ${humanReadableDate}.
+    Use this exact date as your starting point to calculate "tomorrow" or "next week".
 
     If a commitment exists, return EXACTLY:
     {
       "id": "<generate a unique random string>",
       "emailId": "${emailId_bt}",
       "task": "<short clear action like 'Send report'>",
-      "deadline": <Unix timestamp in milliseconds>,
+      "deadline_iso": "<ISO 8601 formatted date string for the deadline>",
       "status": "pending",
       "draftReply": "<short professional reply to resolve it>"
     }
@@ -66,6 +70,11 @@ export async function extractCommitment_bt(emailText_bt, emailId_bt) {
 
     if (!parsedData_bt || parsedData_bt.hasCommitment === false) {
       return null; 
+    }
+
+    if (parsedData_bt.deadline_iso) {
+      parsedData_bt.deadline = new Date(parsedData_bt.deadline_iso).getTime();
+      delete parsedData_bt.deadline_iso; 
     }
 
     return parsedData_bt;
