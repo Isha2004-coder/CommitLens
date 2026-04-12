@@ -29,7 +29,17 @@ router.post("/", async (req, res) => {
   const emailId = `email_${Date.now()}`;
   console.log(`[Extract] Processing email: "${emailText.slice(0, 60)}..."`);
 
-  const extracted = await extractCommitment(emailText, emailId);
+  const sentRaw =
+    raw.emailSentAt ?? raw.messageDate ?? raw.emailDate ?? raw.emailDate_bt;
+  let emailSentAt = undefined;
+  if (sentRaw !== undefined && sentRaw !== null && sentRaw !== "") {
+    const d = new Date(sentRaw);
+    if (!Number.isNaN(d.getTime())) {
+      emailSentAt = d;
+    }
+  }
+
+  const extracted = await extractCommitment(emailText, emailId, emailSentAt);
 
   if (!extracted) {
     console.log("[Extract] No commitment detected");

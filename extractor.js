@@ -9,6 +9,10 @@ const { extractCommitment_bt: extractCommitment_bt_impl } = require(
   "./backend/utils/extractCommitmentOpenRouter.js"
 );
 
-export async function extractCommitment_bt(emailText_bt, emailId_bt) {
-  return extractCommitment_bt_impl(emailText_bt, emailId_bt);
+export async function extractCommitment_bt(
+  emailText_bt,
+  emailId_bt,
+  emailSentAt_bt
+) {
+  return extractCommitment_bt_impl(emailText_bt, emailId_bt, emailSentAt_bt);
 }

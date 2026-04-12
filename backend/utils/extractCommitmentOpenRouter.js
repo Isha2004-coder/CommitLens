@@ -9,9 +9,37 @@ const openai_bt = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-async function extractCommitment_bt(emailText_bt, emailId_bt) {
-  const now = new Date();
-  const humanReadableDate = now.toString();
+function resolveReferenceInstant(emailSentAt_bt) {
+  if (emailSentAt_bt === undefined || emailSentAt_bt === null) {
+    return { date: new Date(), source: "analysis_time" };
+  }
+  const d =
+    emailSentAt_bt instanceof Date
+      ? emailSentAt_bt
+      : new Date(emailSentAt_bt);
+  if (Number.isNaN(d.getTime())) {
+    return { date: new Date(), source: "analysis_time_invalid_sent_at" };
+  }
+  return { date: d, source: "email_sent_time" };
+}
+
+async function extractCommitment_bt(emailText_bt, emailId_bt, emailSentAt_bt) {
+  const { date: refDate, source: refSource } =
+    resolveReferenceInstant(emailSentAt_bt);
+  const refHuman = refDate.toString();
+  const refIso = refDate.toISOString();
+
+  const timeContext_bt =
+    refSource === "email_sent_time"
+      ? `The EMAIL was SENT at this moment (this is the only "now" that matters for the message):
+${refHuman}
+ISO: ${refIso}
+
+Interpret "today", "tomorrow", "this week", "next Friday", "by EOD", etc. relative to THAT moment — not the real-world time when this analysis runs (which may be months later).
+If the email is old, the computed deadline may already be in the past; still return the correct calendar instant implied by the wording.`
+      : `No email send time was provided. Treat relative phrases as if "now" is approximately:
+${refHuman}
+(Prefer ISO deadlines consistent with that assumption.)`;
 
   const systemPrompt_bt = `
     You are an AI that extracts commitments from email text.
@@ -30,8 +58,7 @@ async function extractCommitment_bt(emailText_bt, emailId_bt) {
 
     ---
     
-    The current date and time is: ${humanReadableDate}.
-    Use this exact date as your starting point to calculate "tomorrow" or "next week".
+    ${timeContext_bt}
 
     If a commitment exists, return EXACTLY:
     {

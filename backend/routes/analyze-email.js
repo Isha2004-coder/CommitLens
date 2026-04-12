@@ -12,11 +12,19 @@ router.post("/", async (req, res) => {
 
   const emailId = emailId_bt;
   const emailText = emailText_bt;
-  
+
+  let emailSentAt = undefined;
+  if (emailDate_bt !== undefined && emailDate_bt !== null && emailDate_bt !== "") {
+    const d = new Date(emailDate_bt);
+    if (!Number.isNaN(d.getTime())) {
+      emailSentAt = d;
+    }
+  }
+
   console.log(`[Analyze-Email] Processing for ${userEmail}: "${emailText.slice(0, 60)}..."`);
 
   // Extract commitment (NO auto-storage - Apps Script expects analysis only)
-  const extracted = await extractCommitment(emailText, emailId);
+  const extracted = await extractCommitment(emailText, emailId, emailSentAt);
 
   if (!extracted) {
     console.log("[Analyze-Email] No commitment detected");

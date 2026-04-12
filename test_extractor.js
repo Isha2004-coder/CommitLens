@@ -31,9 +31,15 @@ async function runTest_bt() {
   const sampleEmail_bt =
     'Hey team, great meeting today. I will send you the final architecture diagram by tomorrow at 5 PM.';
   const emailId_bt = 'msg-12345';
+  // Fixed send time so "tomorrow" is anchored to the email, not the day you run the test
+  const emailSentAt_bt = new Date('2024-06-10T15:00:00.000Z');
 
   console.time('Extraction Time');
-  const result_bt = await extractCommitment_bt(sampleEmail_bt, emailId_bt);
+  const result_bt = await extractCommitment_bt(
+    sampleEmail_bt,
+    emailId_bt,
+    emailSentAt_bt
+  );
   console.timeEnd('Extraction Time');
 
   assertShape_bt(result_bt, emailId_bt);
