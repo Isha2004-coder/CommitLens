@@ -1,0 +1,27 @@
+{
+  "timeZone": "America/New_York",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.addons.execute",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/calendar"
+  ],
+  "urlFetchWhitelist": [
+    "https://popsicle-jukebox-oversleep.ngrok-free.dev/"
+  ],
+  "addOns": {
+    "common": {
+      "name": "CommitLens",
+      "logoUrl": "https://www.gstatic.com/images/icons/material/system/2x/smart_toy_black_48dp.png",
+      "homepageTrigger": { "runFunction": "buildHomePage" }
+    },
+    "gmail": {
+      "contextualTriggers": [
+        { "unconditional": {}, "onTriggerFunction": "buildAddOn" }
+      ]
+    }
+  }
+}
