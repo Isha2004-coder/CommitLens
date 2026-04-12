@@ -2,47 +2,69 @@ import 'dotenv/config';
 import OpenAI from "openai";
 
 const openai_bt = new OpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function extractCommitment_bt(emailText_bt, emailId_bt) {
+  const currentTime_bt = Date.now(); 
   
-  export async function extractCommitment_bt(emailText_bt, emailId_bt) {
-    const currentTime_bt = Date.now(); 
-    
-    const systemPrompt_bt = `
-      You are an AI that extracts commitments or promises from emails.
-      Analyze the text and determine if the sender made a commitment with a deadline.
-      The current Unix timestamp in milliseconds is ${currentTime_bt}. Use this to calculate deadlines.
-      
-      If a commitment is found, return a JSON object matching this EXACT schema:
-      {
-        "id": "<generate a unique random string>",
-        "emailId": "${emailId_bt}",
-        "task": "<short description of the promise>",
-        "deadline": <Unix timestamp in milliseconds for the deadline>,
-        "status": "pending",
-        "draftReply": "<a polite, short AI-generated draft to resolve this later>"
-      }
-      
-      If NO commitment is found, return exactly: { "hasCommitment": false }
-      DO NOT wrap the response in markdown blocks. Return ONLY valid JSON.
-    `;
-  
-    try {
-      const completion_bt = await openai_bt.chat.completions.create({
-        model: "openai/gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt_bt },
-          { role: "user", content: emailText_bt }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.1,
-      });
+  const systemPrompt_bt = `
+    You are an AI that extracts commitments from email text.
+
+    A commitment is ANY statement where the sender promises to do something in the future.
+
+    ALWAYS treat the following as commitments:
+    - "I will ..."
+    - "I'll ..."
+    - "I am going to ..."
+    - "I will send ..."
+    - "I will share ..."
+    - "I will follow up ..."
+
+    Even if the sentence is simple, it MUST be treated as a commitment.
+
+    ---
+
+    If a commitment exists, return EXACTLY:
+    {
+      "id": "<generate a unique random string>",
+      "emailId": "${emailId_bt}",
+      "task": "<short clear action like 'Send report'>",
+      "deadline": <Unix timestamp in milliseconds>,
+      "status": "pending",
+      "draftReply": "<short professional reply to resolve it>"
+    }
+
+    ---
+
+    If NO commitment exists, return EXACTLY:
+    { "hasCommitment": false }
+
+    ---
+
+    IMPORTANT RULES:
+    - NEVER ignore "I will..." statements
+    - ALWAYS extract task from them
+    - Keep task short and actionable
+    - Return ONLY valid JSON
+  `;
+
+  try {
+    const completion_bt = await openai_bt.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt_bt },
+        { role: "user", content: emailText_bt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+    });
 
     const rawResponse_bt = completion_bt.choices[0].message.content;
     const parsedData_bt = JSON.parse(rawResponse_bt);
 
-    if (parsedData_bt.hasCommitment === false) {
+    if (!parsedData_bt || parsedData_bt.hasCommitment === false) {
       return null; 
     }
 
