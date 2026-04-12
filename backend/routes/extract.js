@@ -3,10 +3,17 @@ const router = express.Router();
 const { extractCommitment } = require("../utils/extractorWrapper");
 const { createCommitment, getCommitmentById } = require("../data/storage");
 
+function parseOptionalIsMine(value) {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return undefined;
+}
+
 // POST /extract
 router.post("/", async (req, res) => {
   const raw = req.body || {};
   const { subject, body, emailText: emailTextField } = raw;
+  const isMineFlag = parseOptionalIsMine(raw.isMine);
 
   const sub = typeof subject === "string" ? subject.trim() : "";
   const bod = typeof body === "string" ? body.trim() : "";
@@ -33,10 +40,16 @@ router.post("/", async (req, res) => {
     return res.status(409).json({ error: "Duplicate commitment ID, please retry" });
   }
 
-  await createCommitment(extracted);
-  console.log(`[Extract] Commitment stored: ${extracted.id} — "${extracted.task.slice(0, 50)}"`);
+  const toStore =
+    isMineFlag !== undefined ? { ...extracted, isMine: isMineFlag } : extracted;
 
-  return res.status(201).json({ message: "Commitment extracted and stored", commitment: extracted });
+  await createCommitment(toStore);
+  console.log(`[Extract] Commitment stored: ${toStore.id} — "${toStore.task.slice(0, 50)}"`);
+
+  return res.status(201).json({
+    message: "Commitment extracted and stored",
+    commitment: toStore,
+  });
 });
 
 module.exports = router;
