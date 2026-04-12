@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { startDeadlineChecker } = require("./jobs/deadlineChecker");
 const commitmentsRouter = require("./routes/commitments");
+const extractRouter = require("./routes/extract");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +17,7 @@ app.get("/", (req, res) => {
 
 // Routes
 app.use("/commitments", commitmentsRouter);
+app.use("/extract", extractRouter);
 
 // Start scheduler
 startDeadlineChecker();
