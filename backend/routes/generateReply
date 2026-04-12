@@ -24,35 +24,66 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: "task is required" });
   }
 
-  const deadlineStr =
-    deadline !== undefined && deadline !== null && !Number.isNaN(Number(deadline))
-      ? new Date(Number(deadline)).toLocaleString()
-      : "unspecified";
+  const deadlineMs =
+    deadline !== undefined &&
+    deadline !== null &&
+    String(deadline).trim() !== "" &&
+    !Number.isNaN(Number(deadline))
+      ? Number(deadline)
+      : null;
 
-  const theirsInstructions = `
-The recipient of YOUR email is the person who MADE this commitment (they promised to do it).
-You did NOT miss this commitment yourself. Do NOT apologize as if you failed to do the task.
-Write a short, polite follow-up (2–4 sentences) that:
-- References the specific commitment below in plain language (use the exact topic, e.g. driving, a document, a meeting).
-- Gently checks status or offers help if appropriate.
-- Sounds natural, not accusatory.
-- check date if mentioned and if its today or yesterday
+  const nowMs = Date.now();
+  // True only after the instant has passed (no apology before this)
+  const missedDeadline =
+    deadlineMs !== null && nowMs > deadlineMs;
 
-Do NOT say you are sorry for missing the deadline or for not doing their task.
+  const deadlineIso =
+    deadlineMs !== null ? new Date(deadlineMs).toISOString() : "unspecified";
+  const nowIso = new Date().toISOString();
+
+  const scenarioKey = `${isMine ? "mine" : "theirs"}_${missedDeadline ? "late" : "on_time_or_future"}`;
+
+  const instructionsByScenario = {
+    mine_late: `
+The writer promised to do the task below and the deadline (see ISO time below) is ALREADY PAST relative to "right now".
+Write a short apology / recommit email (2–4 sentences): acknowledge being late, restate the task, propose when you'll deliver.
+When you mention time, use the EXACT deadline clock time from the ISO string (do not round 4:30 to 4:00).
 Do NOT use placeholders like [Name]. No fake names.
-`;
-
-  const mineInstructions = `
-The person writing is the one who MADE this commitment and missed or is late on the deadline.
-Write a short professional apology / recommit email (2–4 sentences): acknowledge the slip, restate the task briefly, propose next steps.
+`,
+    mine_on_time_or_future: `
+The writer promised to do the task below but the deadline is STILL IN THE FUTURE (or is now) relative to "right now" — they have NOT missed it.
+Write a short professional email (2–4 sentences): e.g. quick update that you're on track, or confirm timing — NOT an apology for missing the deadline.
+Do NOT say "sorry for missing the deadline" or imply the deadline passed.
+If you mention the due time, copy it from the deadline ISO exactly (preserve :30, etc.).
 Do NOT use placeholders like [Name]. No fake names.
-`;
+`,
+    theirs_late: `
+The recipient of your email made the commitment below; the deadline ISO is already past relative to "right now".
+Write a short polite follow-up (2–4 sentences) checking in on their overdue commitment. Not aggressive.
+If you reference the due time, use the exact time from the deadline ISO (do not round).
+Do NOT use placeholders like [Name]. No fake names.
+`,
+    theirs_on_time_or_future: `
+The recipient made the commitment below; the deadline is STILL IN THE FUTURE relative to "right now" — they are NOT late yet.
+Write a short polite check-in or reminder (2–4 sentences). Do NOT accuse them of missing the deadline or say they're late.
+Do NOT apologize on your own behalf for their task.
+If you mention the due time, use the exact time from the deadline ISO (preserve minutes).
+Do NOT use placeholders like [Name]. No fake names.
+`,
+  };
+
+  const branchInstructions =
+    instructionsByScenario[scenarioKey] || instructionsByScenario.theirs_on_time_or_future;
 
   const prompt = `
-${isMine ? mineInstructions : theirsInstructions}
+FACTS (obey these; do not contradict):
+- Right now (UTC): ${nowIso}
+- Commitment deadline (UTC, exact instant): ${deadlineIso}
+- missedDeadline (computed): ${missedDeadline ? "YES — deadline is in the past" : "NO — deadline is now or in the future"}
+
+${branchInstructions}
 
 Commitment (task summary): ${String(task).trim()}
-Relevant deadline (context): ${deadlineStr}
 
 Respond with ONLY valid JSON in this exact shape:
 {"subject":"...","body":"..."}
