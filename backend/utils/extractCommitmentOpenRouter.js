@@ -42,48 +42,48 @@ ${refHuman}
 (Prefer ISO deadlines consistent with that assumption.)`;
 
   const systemPrompt_bt = `
-    You are an AI that extracts commitments from email text.
+    You are an AI that extracts commitments and deadlines from email text.
 
-    A commitment is ANY statement where the sender promises to do something in the future.
+    A commitment is ANY of the following:
+    1. The SENDER promises to do something — "I will...", "I'll...", "I am going to...", "I will send...", "I will follow up..."
+    2. The READER is assigned a task or deadline — "Your task is due...", "Please send by...", "We need this by...", "Deadline is...", "Can you send...", "Your report is due..."
+    3. A meeting, event, or action with a clear date — "The meeting is tomorrow", "Submit by Friday"
 
-    ALWAYS treat the following as commitments:
-    - "I will ..."
-    - "I'll ..."
-    - "I am going to ..."
-    - "I will send ..."
-    - "I will share ..."
-    - "I will follow up ..."
+    ALWAYS extract a commitment if:
+    - There is a deadline mentioned (tomorrow, Friday, by EOD, by 5pm, etc.)
+    - Someone is expected to do something
+    - A task is assigned to anyone in the email
 
-    Even if the sentence is simple, it MUST be treated as a commitment.
+    Even simple sentences like "Your task is due tomorrow" or "Please send the report by Friday" MUST be treated as commitments.
 
     ---
-    
+
     ${timeContext_bt}
 
     If a commitment exists, return EXACTLY:
     {
       "id": "<generate a unique random string>",
       "emailId": "${emailId_bt}",
-      "task": "<short clear action like 'Send report'>",
+      "task": "<short clear action like 'Send report' or 'Complete task'>",
       "deadline_iso": "<ISO 8601 formatted date string for the deadline>",
       "status": "pending",
-      "draftReply": "<short professional reply to resolve it>"
+      "draftReply": "<short professional reply to acknowledge or resolve it>"
     }
 
     ---
 
-    If NO commitment exists, return EXACTLY:
+    If NO commitment or deadline exists at all, return EXACTLY:
     { "hasCommitment": false }
 
     ---
 
     IMPORTANT RULES:
-    - NEVER ignore "I will..." statements
-    - ALWAYS extract task from them
-    - Keep task short and actionable
-    - If the email states a specific clock time (e.g. "4:30 PM", "16:30", "by 5:15"), set deadline_iso to that exact local time on the correct calendar day — do NOT round to whole hours (never turn 4:30 into 4:00).
-    - If only a date is given with no time, use end of that calendar day in America/Phoenix (Arizona; MST all year, no DST) and express deadline_iso as the correct UTC instant.
-    - If the email implies a local date/time but no timezone is given, assume America/Phoenix for interpreting "tomorrow", "Friday", and any unstated zone.
+    - ALWAYS extract when a deadline is mentioned, even if phrased passively
+    - ALWAYS extract when a task is assigned to anyone
+    - Keep task short and actionable (e.g. "Send report", "Complete project", "Reply to email")
+    - If the email states a specific clock time (e.g. "4:30 PM", "16:30", "by 5:15"), set deadline_iso to that exact local time on the correct calendar day — do NOT round to whole hours
+    - If only a date is given with no time, use end of that calendar day in America/Phoenix (Arizona; MST all year, no DST)
+    - If the email implies a local date/time but no timezone is given, assume America/Phoenix
     - Return ONLY valid JSON
   `;
 
@@ -94,7 +94,6 @@ ${refHuman}
         { role: "system", content: systemPrompt_bt },
         { role: "user", content: emailText_bt },
       ],
-      response_format: { type: "json_object" },
       temperature: 0.1,
     });
 

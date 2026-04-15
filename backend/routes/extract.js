@@ -14,6 +14,7 @@ router.post("/", async (req, res) => {
   const raw = req.body || {};
   const { subject, body, emailText: emailTextField } = raw;
   const isMineFlag = parseOptionalIsMine(raw.isMine);
+  const userEmail = typeof raw.userEmail === "string" ? raw.userEmail.trim() : undefined;
 
   const sub = typeof subject === "string" ? subject.trim() : "";
   const bod = typeof body === "string" ? body.trim() : "";
@@ -50,8 +51,11 @@ router.post("/", async (req, res) => {
     return res.status(409).json({ error: "Duplicate commitment ID, please retry" });
   }
 
-  const toStore =
-    isMineFlag !== undefined ? { ...extracted, isMine: isMineFlag } : extracted;
+  const toStore = {
+    ...extracted,
+    ...(isMineFlag !== undefined && { isMine: isMineFlag }),
+    ...(userEmail && { userEmail }),
+  };
 
   await createCommitment(toStore);
   console.log(`[Extract] Commitment stored: ${toStore.id} — "${toStore.task.slice(0, 50)}"`);

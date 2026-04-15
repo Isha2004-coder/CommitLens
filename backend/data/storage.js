@@ -30,6 +30,11 @@ function persist() {
 }
 
 async function createCommitment(commitment) {
+  const taskKey = (commitment.task || "").toLowerCase().trim();
+  const duplicate = commitments.find(
+    (c) => (c.task || "").toLowerCase().trim() === taskKey && c.status !== "completed"
+  );
+  if (duplicate) return duplicate;
   commitments.push(commitment);
   persist();
   return commitment;

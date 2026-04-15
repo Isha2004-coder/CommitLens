@@ -81,6 +81,7 @@ function buildHomePage() {
 
 function getAllCommitments() {
   var url = BASE_URL + "/commitments";
+  Logger.log("Fetching from: " + url);
   try {
     var response = UrlFetchApp.fetch(url, {
       muteHttpExceptions: true,
@@ -88,11 +89,14 @@ function getAllCommitments() {
     });
     var code = response.getResponseCode();
     var text = response.getContentText();
+    Logger.log("Response code: " + code);
+    Logger.log("Response length: " + text.length);
     if (code !== 200) { Logger.log("GET /commitments failed: " + code); return []; }
     var data = JSON.parse(text);
+    Logger.log("Parsed data length: " + data.length);
     if (!Array.isArray(data)) return [];
     var seen = {};
-    return data.filter(function(c) {
+    var filtered = data.filter(function(c) {
       if (!c || !c.task) return false;
       if (c.status === "completed") return false;
       var key = c.id || c.task;
@@ -100,7 +104,9 @@ function getAllCommitments() {
       seen[key] = true;
       return true;
     });
-  } catch (err) { Logger.log(err); return []; }
+    Logger.log("Filtered commitments: " + filtered.length);
+    return filtered;
+  } catch (err) { Logger.log("ERROR: " + err); return []; }
 }
 
 function sendToBackend(subject, body, isMine, messageDate) {
@@ -157,12 +163,14 @@ function getReply(task, deadline, isMine) {
 
 function buildListView(commitments) {
   var card = CardService.newCardBuilder();
-  card.setHeader(CardService.newCardHeader().setTitle("📋 CommitLens"));
+  card.setHeader(CardService.newCardHeader().setTitle("📋 CommitLens (" + commitments.length + " pending)"));
   var section = CardService.newCardSection();
   if (!commitments.length) {
     section.addWidget(CardService.newTextParagraph().setText("✅ All caught up! No pending commitments."));
   } else {
-    commitments.forEach(function(c) {
+    var showCount = Math.min(commitments.length, 5);
+    for (var i = 0; i < showCount; i++) {
+      var c = commitments[i];
       section.addWidget(CardService.newTextParagraph().setText("• <b>" + c.task + "</b><br>⏰ " + getDueText(c.deadline)));
       var actionResolve = CardService.newAction().setFunctionName("handleResolve").setParameters({ task: String(c.task), deadline: String(c.deadline), isMine: c.isMine === true ? "true" : "false", replyTo: "" });
       var actionCompose = CardService.newAction().setFunctionName("handleOpenCompose").setParameters({ task: String(c.task), deadline: String(c.deadline), isMine: c.isMine === true ? "true" : "false", replyTo: "" });
@@ -171,7 +179,10 @@ function buildListView(commitments) {
       section.addWidget(CardService.newTextButton().setText("Open in Gmail (edit & send)").setOnClickAction(actionCompose));
       section.addWidget(CardService.newTextButton().setText("✓ Mark as Done").setOnClickAction(actionDone));
       section.addWidget(CardService.newDivider());
-    });
+    }
+    if (commitments.length > 5) {
+      section.addWidget(CardService.newTextParagraph().setText("<i>...and " + (commitments.length - 5) + " more</i>"));
+    }
   }
   card.addSection(section);
   return card.build();
