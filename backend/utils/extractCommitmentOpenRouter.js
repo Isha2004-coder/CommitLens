@@ -4,6 +4,20 @@
  */
 const OpenAI = require("openai");
 
+let _queue = Promise.resolve();
+let _lastCallAt = 0;
+const MIN_GAP_MS = 10000;
+
+function enqueueAI(fn) {
+  _queue = _queue.then(async () => {
+    const wait = MIN_GAP_MS - (Date.now() - _lastCallAt);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    _lastCallAt = Date.now();
+    return fn();
+  });
+  return _queue;
+}
+
 const openai_bt = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENAI_API_KEY,
@@ -87,41 +101,49 @@ ${refHuman}
     - Return ONLY valid JSON
   `;
 
-  try {
-    const completion_bt = await openai_bt.chat.completions.create({
-      model: "openai/gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt_bt },
-        { role: "user", content: emailText_bt },
-      ],
-      temperature: 0.1,
-    });
+  return enqueueAI(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const MAX_RETRIES = 4;
 
-    const rawResponse_bt = completion_bt.choices[0].message.content;
-    const parsedData_bt = JSON.parse(rawResponse_bt);
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const completion_bt = await openai_bt.chat.completions.create({
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+        messages: [
+          { role: "system", content: systemPrompt_bt },
+          { role: "user", content: emailText_bt },
+        ],
+        temperature: 0.1,
+      });
 
-    if (!parsedData_bt || parsedData_bt.hasCommitment === false) {
+      const rawResponse_bt = completion_bt.choices[0].message.content;
+      const parsedData_bt = JSON.parse(rawResponse_bt);
+
+      if (!parsedData_bt || parsedData_bt.hasCommitment === false) {
+        return null;
+      }
+
+      if (parsedData_bt.deadline_iso) {
+        parsedData_bt.deadline = new Date(parsedData_bt.deadline_iso).getTime();
+        delete parsedData_bt.deadline_iso;
+      }
+
+      return parsedData_bt;
+    } catch (error_bt) {
+      const is429 = error_bt?.status === 429;
+      if (is429 && attempt < MAX_RETRIES) {
+        const resetHeader = error_bt?.headers?.get?.("x-ratelimit-reset");
+        const resetMs = resetHeader ? parseInt(resetHeader, 10) : null;
+        const delay = resetMs ? Math.max(2000, resetMs - Date.now() + 1500) : Math.pow(2, attempt) * 10000;
+        console.warn(`[Extract] Rate limited. Waiting ${Math.round(delay / 1000)}s until reset... (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(delay);
+        continue;
+      }
+      console.error("🔥 AI Extraction Error:", error_bt);
       return null;
     }
-
-    if (parsedData_bt.deadline_iso) {
-      parsedData_bt.deadline = new Date(parsedData_bt.deadline_iso).getTime();
-      delete parsedData_bt.deadline_iso;
-    }
-
-    return parsedData_bt;
-  } catch (error_bt) {
-    console.error("🔥 AI Extraction Error:", error_bt);
-
-    return {
-      id: "mock_" + Date.now(),
-      emailId: emailId_bt,
-      task: "Mock fallback task (API failed or timed out)",
-      deadline: Date.now() + 86400000,
-      status: "pending",
-      draftReply: "Here is the information requested.",
-    };
   }
+  }); // end enqueueAI
 }
 
 module.exports = { extractCommitment_bt };

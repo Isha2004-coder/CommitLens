@@ -111,10 +111,11 @@ function getAllCommitments() {
 
 function sendToBackend(subject, body, isMine, messageDate) {
   var url = BASE_URL + "/extract";
-  var combined = (subject + "\n" + body).trim();
+  var bodyTrunc = (body || "").slice(0, 1500);
+  var combined = (subject + "\n" + bodyTrunc).trim();
   var payload = {
     subject: subject,
-    body: body,
+    body: bodyTrunc,
     emailText: combined,
     isMine: isMine === true,
     userEmail: MY_EMAIL
@@ -301,6 +302,7 @@ function scanRecentEmails() {
       addToCalendar(result.task, result.deadline, isMine);
     }
     processed++;
+    Utilities.sleep(10000);
   }
   Logger.log("[Scanner] Processed " + processed + " emails");
 }
