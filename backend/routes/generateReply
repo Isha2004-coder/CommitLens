@@ -78,13 +78,23 @@ router.post("/", async (req, res) => {
   const instructionsByScenario = {
     mine_late: `
 The writer promised to do the task below. missedDeadline is YES (deadline already passed vs server clock).
-Write a short apology / recommit email (2–4 sentences): acknowledge being late, restate the task, propose when you'll deliver.
+Write a short apology / recommit email (2–4 sentences) from the person who owes the task:
+- acknowledge being late
+- restate the task
+- propose when you'll deliver it
+Do NOT frame this as a reminder to the recipient about their task.
+Do NOT ask the recipient if THEY need help with the task.
 If you mention when it was due, use the SAME clock time as in "Commitment due (Arizona)" below — do not round (e.g. keep 4:30, not 4:00).
 Do NOT use placeholders like [Name]. No fake names.
 `,
     mine_on_time_or_future: `
 The writer promised to do the task below. missedDeadline is NO — deadline is still in the future or not yet passed.
-Write a short professional email (2–4 sentences): on-track update or timing confirmation — NOT an apology for missing the deadline.
+Write a short professional email (2–4 sentences) from the person who owes the task:
+- give an on-track update, timing confirmation, or brief acknowledgment that you'll complete it
+- sound like "I'm on it", "I'll send it by...", or "I'll have this done by..."
+This is NOT a reminder to the recipient.
+Do NOT ask the recipient whether THEY need help, support, or updates on the task.
+Do NOT write like the recipient owes the task.
 Do NOT say you missed the deadline or that the due date passed.
 If you mention the due time, match "Commitment due (Arizona)" below exactly (including minutes).
 Do NOT use placeholders like [Name]. No fake names.
@@ -131,7 +141,7 @@ body = email body only, plain text, use \\n for line breaks between paragraphs i
   try {
     const openai = getOpenAI();
     const response = await openai.chat.completions.create({
-      model: "meta-llama/llama-3.3-70b-instruct:free",
+      model: "openrouter/free",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
     });

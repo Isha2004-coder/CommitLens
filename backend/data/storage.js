@@ -30,10 +30,20 @@ function persist() {
 }
 
 async function createCommitment(commitment) {
+  const emailId = typeof commitment.emailId === "string" ? commitment.emailId.trim() : "";
+  if (emailId) {
+    const existingByEmail = commitments.find((c) => (c.emailId || "") === emailId);
+    if (existingByEmail) return existingByEmail;
+  }
+
   const taskKey = (commitment.task || "").toLowerCase().trim();
-  const duplicate = commitments.find(
-    (c) => (c.task || "").toLowerCase().trim() === taskKey && c.status !== "completed"
-  );
+  const deadline = Number(commitment.deadline);
+  const duplicate = commitments.find((c) => {
+    if (c.status === "completed") return false;
+    const sameTask = (c.task || "").toLowerCase().trim() === taskKey;
+    const sameDeadline = Number(c.deadline) === deadline;
+    return sameTask && sameDeadline;
+  });
   if (duplicate) return duplicate;
   commitments.push(commitment);
   persist();
@@ -46,6 +56,10 @@ async function getAllCommitments() {
 
 async function getCommitmentById(id) {
   return commitments.find((c) => c.id === id) || null;
+}
+
+async function getCommitmentByEmailId(emailId) {
+  return commitments.find((c) => (c.emailId || "") === emailId) || null;
 }
 
 async function updateCommitment(id, updates) {
@@ -64,6 +78,7 @@ module.exports = {
   createCommitment,
   getAllCommitments,
   getCommitmentById,
+  getCommitmentByEmailId,
   updateCommitment,
   getPendingCommitments,
 };

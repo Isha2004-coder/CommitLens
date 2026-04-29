@@ -6,7 +6,7 @@ const OpenAI = require("openai");
 
 let _queue = Promise.resolve();
 let _lastCallAt = 0;
-const MIN_GAP_MS = 10000;
+const MIN_GAP_MS = 1000;
 
 function enqueueAI(fn) {
   _queue = _queue.then(async () => {
@@ -22,6 +22,23 @@ const openai_bt = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+function parseJsonResponse_(raw) {
+  const text = String(raw || "").trim();
+  if (!text) {
+    throw new Error("Empty AI response");
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) {
+      return JSON.parse(fenced[1].trim());
+    }
+    throw err;
+  }
+}
 
 function resolveReferenceInstant(emailSentAt_bt) {
   if (emailSentAt_bt === undefined || emailSentAt_bt === null) {
@@ -108,7 +125,7 @@ ${refHuman}
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const completion_bt = await openai_bt.chat.completions.create({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
+        model: "openrouter/free",
         messages: [
           { role: "system", content: systemPrompt_bt },
           { role: "user", content: emailText_bt },
@@ -117,7 +134,7 @@ ${refHuman}
       });
 
       const rawResponse_bt = completion_bt.choices[0].message.content;
-      const parsedData_bt = JSON.parse(rawResponse_bt);
+      const parsedData_bt = parseJsonResponse_(rawResponse_bt);
 
       if (!parsedData_bt || parsedData_bt.hasCommitment === false) {
         return null;
@@ -146,4 +163,120 @@ ${refHuman}
   }); // end enqueueAI
 }
 
-module.exports = { extractCommitment_bt };
+async function extractCommitmentsBatch_bt(emailItems_bt) {
+  const items = Array.isArray(emailItems_bt) ? emailItems_bt : [];
+  if (!items.length) return [];
+
+  const preparedItems = items.map((item, index) => {
+    const resolved = resolveReferenceInstant(item.emailSentAt);
+    return {
+      idx: index,
+      emailId: item.emailId,
+      subject: item.subject || "",
+      body: item.body || "",
+      refHuman: resolved.date.toString(),
+      refIso: resolved.date.toISOString(),
+      hasSentAt: resolved.source === "email_sent_time",
+    };
+  });
+
+  const systemPrompt_bt = `
+You extract commitments and deadlines from multiple emails at once.
+
+Return ONLY valid JSON as an array with exactly one object per input email, in the same order.
+
+For each email:
+- If there is a commitment, task, promise, request with expectation, or deadline, return:
+  {
+    "emailId": "<same email id>",
+    "hasCommitment": true,
+    "task": "<short actionable task>",
+    "deadline_iso": "<ISO 8601 date string>",
+    "status": "pending",
+    "draftReply": "<short professional reply>"
+  }
+- If there is no commitment, return:
+  {
+    "emailId": "<same email id>",
+    "hasCommitment": false
+  }
+
+Rules:
+- Always extract when a deadline is mentioned.
+- Always extract when someone is expected to do something.
+- Keep task short and actionable.
+- Respect each email's own reference time for words like "tomorrow" and "next Friday".
+- If only a date is given with no time, use end of that day in America/Phoenix.
+- If no timezone is given, assume America/Phoenix.
+`;
+
+  const userPayload_bt = preparedItems.map((item) => ({
+    emailId: item.emailId,
+    referenceTime: item.hasSentAt
+      ? {
+          type: "email_sent_time",
+          human: item.refHuman,
+          iso: item.refIso,
+        }
+      : {
+          type: "analysis_time_fallback",
+          human: item.refHuman,
+          iso: item.refIso,
+        },
+    email: {
+      subject: item.subject,
+      body: item.body,
+    },
+  }));
+
+  return enqueueAI(async () => {
+    const completion_bt = await openai_bt.chat.completions.create({
+      model: "openrouter/free",
+      messages: [
+        { role: "system", content: systemPrompt_bt },
+        { role: "user", content: JSON.stringify(userPayload_bt) },
+      ],
+      temperature: 0.1,
+    });
+
+    const rawResponse_bt = completion_bt.choices[0].message.content;
+    const parsed_bt = parseJsonResponse_(rawResponse_bt);
+    if (!Array.isArray(parsed_bt)) {
+      throw new Error("Batch extraction response was not an array");
+    }
+
+    const parsedByEmailId = {};
+    parsed_bt.forEach((entry) => {
+      if (entry && entry.emailId) {
+        parsedByEmailId[String(entry.emailId)] = entry;
+      }
+    });
+
+    return preparedItems.map((item) => {
+      const parsedItem = parsedByEmailId[item.emailId];
+      if (!parsedItem || parsedItem.hasCommitment === false) {
+        return null;
+      }
+
+      const normalized = {
+        id: parsedItem.id || `batch_${item.emailId}`,
+        emailId: item.emailId,
+        task: parsedItem.task,
+        status: parsedItem.status || "pending",
+        draftReply: parsedItem.draftReply || "",
+      };
+
+      if (parsedItem.deadline_iso) {
+        normalized.deadline = new Date(parsedItem.deadline_iso).getTime();
+      }
+
+      if (!normalized.task || !normalized.deadline || Number.isNaN(normalized.deadline)) {
+        return null;
+      }
+
+      return normalized;
+    });
+  });
+}
+
+module.exports = { extractCommitment_bt, extractCommitmentsBatch_bt };
